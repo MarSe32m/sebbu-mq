@@ -111,7 +111,7 @@ public final class MessageQueueClient {
 }
 
 extension MessageQueueClient {
-    public func received(_ data: [UInt8]) {
+    func received(_ data: [UInt8]) {
         var readStream = ReadableBitStream(bytes: data)
         guard let packet = try? MessageQueuePacket(from: &readStream) else {
             print("Got a faulty packet...")
@@ -136,7 +136,7 @@ extension MessageQueueClient {
         }
     }
     
-    public func disconnected() {
+    func disconnected() {
         connectionContinuation?.resume(throwing: MessageQueueClientConnectionError.unknownError)
         connectionContinuation = nil
         isDisconnected = true

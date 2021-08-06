@@ -17,15 +17,19 @@ public final class MessageQueueServer {
     
     private var clients = [MessageQueueServerClient]()
     
-    public let username: String
-    public let password: String
+    private let username: String
+    private let password: String
+    
+    private var connectionHandler: MessageQueueClientConnectionHandler!
     
     public init(username: String, password: String, eventLoopGroup: EventLoopGroup) throws {
         self.username = try BCrypt.hash(username)
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
         webSocketServer = try WebSocketServer(tls: nil, eventLoopGroup: eventLoopGroup)
-        webSocketServer.delegate = self
+        
+        connectionHandler = MessageQueueClientConnectionHandler(server: self)
+        webSocketServer.delegate = connectionHandler
     }
     
     public init(username: String, password: String, numberOfThreads: Int) throws {
@@ -33,7 +37,9 @@ public final class MessageQueueServer {
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
         webSocketServer = try WebSocketServer(tls: nil, numberOfThreads: numberOfThreads)
-        webSocketServer.delegate = self
+        
+        connectionHandler = MessageQueueClientConnectionHandler(server: self)
+        webSocketServer.delegate = connectionHandler
     }
     
     @inlinable
@@ -47,7 +53,7 @@ public final class MessageQueueServer {
     }
     
     @inlinable
-    public final func shutdown() throws {
+    public nonisolated final func shutdown() throws {
         try webSocketServer.shutdown()
     }
     
@@ -91,13 +97,19 @@ public final class MessageQueueServer {
         storage.remove(client: messageQueueClient)
     }
     
-    private final func _connected(_ client: WebSocket) {
+    final func _connected(_ client: WebSocket) {
         clients.append(MessageQueueServerClient(server: self, webSocket: client))
     }
 }
 
-extension MessageQueueServer: WebSocketServerProtocol {
+fileprivate class MessageQueueClientConnectionHandler: WebSocketServerProtocol {
+    unowned let server: MessageQueueServer
+    
+    init(server: MessageQueueServer) {
+        self.server = server
+    }
+    
     nonisolated public func onConnection(requestHead: HTTPRequestHead, webSocket: WebSocket, channel: Channel) {
-        Task { await self._connected(webSocket) }
+        Task { await server._connected(webSocket) }
     }
 }
