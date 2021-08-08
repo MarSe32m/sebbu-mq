@@ -6,8 +6,10 @@
 //
 
 import Foundation
-import SebbuKit
+import SebbuCrypto
+import SebbuBitStream
 import NIO
+import _NIOConcurrency
 
 @globalActor
 actor MessageQueueClientActor: GlobalActor {
@@ -15,33 +17,23 @@ actor MessageQueueClientActor: GlobalActor {
 }
 
 public final class MessageQueueClient {
-    private var webSocket: WebSocket!
-    private var webSocketClient: WebSocketClient
-    
-    @MessageQueueClientActor
     private var popRequests = [(id: UUID, queue: String, continuation: UnsafeContinuation<[UInt8]?, Never>)]()
     
     private var connectionContinuation: UnsafeContinuation<Void, Error>?
     private var isDisconnected = false
     
-    private var evlg: EventLoopGroup?
+    private var evlg: EventLoopGroup
+    private let networkClient: NetworkClient
     
     public init(eventLoopGroup: EventLoopGroup? = nil) {
-        self.evlg = eventLoopGroup
-        self.webSocketClient = WebSocketClient.init(eventLoopGroupProvider: evlg == nil ? .createNew : .shared(evlg!))
+        let _evlg = eventLoopGroup != nil ? eventLoopGroup! : MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.evlg = _evlg
+        self.networkClient = NetworkClient(eventLoopGroup: _evlg)
+        networkClient.receiveHandler.messageQueueClient = self
     }
     
     public final func connect(username: String, password: String, host: String, port: Int) async throws {
-        webSocket = try webSocketClient.connect(scheme: "ws", host: host, port: port)
-        webSocket.onBinary { _, buffer in
-            guard let bytes = buffer.getBytes(at: 0, length: buffer.readableBytes) else {
-                return
-            }
-            self.received(bytes)
-        }
-        _ = webSocket.onClose.always { _ in
-            self.disconnected()
-        }
+        try await networkClient.connect(host: host, port: port).get()
         send(.connect(ConnectionPacket(username: username, password: password)))
         try await withUnsafeThrowingContinuation { continuation in
             connectionContinuation = continuation
@@ -52,7 +44,7 @@ public final class MessageQueueClient {
         send(.disconnect)
         Task {
             try await Task.sleep(nanoseconds: 10_000_000)
-            webSocket.close(code: .normalClosure, promise: nil)
+            networkClient.disconnectBlocking()
             isDisconnected = true
         }
     }
@@ -69,7 +61,7 @@ public final class MessageQueueClient {
         let popRequestPacket = PopRequestPacket(queue: queue, timeout: timeout)
         send(.popRequest(popRequestPacket))
         return await withUnsafeContinuation({ continuation in
-            Task {await add(popRequestPacket, continuation: continuation)}
+            Task { await add(popRequestPacket, continuation: continuation) }
         })
     }
     
@@ -91,7 +83,7 @@ public final class MessageQueueClient {
         let continuations = popRequests.filter { $0.id == responsePacket.id && $0.queue == responsePacket.queue }
                                        .map { $0.continuation }
         popRequests.removeAll(where: {$0.id == responsePacket.id && $0.queue == responsePacket.queue})
-        continuations.forEach {$0.resume(returning: responsePacket.payload)}
+        continuations.forEach {$0.resume(returning: responsePacket.failed ? nil : responsePacket.payload)}
     }
     
     @MessageQueueClientActor
@@ -106,7 +98,7 @@ public final class MessageQueueClient {
         var writeStream = WritableBitStream(size: 128)
         writeStream.appendObject(packet)
         let data = writeStream.packBytes()
-        webSocket.send(data, promise: nil)
+        networkClient.send(data)
     }
 }
 

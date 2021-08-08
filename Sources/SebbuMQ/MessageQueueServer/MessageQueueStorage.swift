@@ -7,7 +7,6 @@
 
 import Foundation
 
-@MainActor
 final class MessageQueueStorage {
     private var queues: [String : MessageQueue] = [:]
     

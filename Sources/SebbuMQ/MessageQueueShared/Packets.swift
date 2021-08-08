@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SebbuKit
+import SebbuBitStream
 
 enum MessageQueuePacket: BitStreamCodable {
     case connect(ConnectionPacket)
@@ -161,23 +161,34 @@ struct PopResponsePacket: BitStreamCodable {
     let queue: String
     let id: UUID
     let payload: [UInt8]
+    let failed: Bool
     
-    public init(queue: String, id: UUID, payload: [UInt8]) {
+    public init(queue: String, id: UUID, payload: [UInt8], failed: Bool = false) {
         self.queue = queue
         self.id = id
         self.payload = payload
+        self.failed = failed
     }
     
     init(from bitStream: inout ReadableBitStream) throws {
         queue = try bitStream.read()
         id = try bitStream.read()
-        payload = try bitStream.read()
+        let isFailedPopRequest: Bool = try bitStream.read()
+        failed = isFailedPopRequest
+        if !isFailedPopRequest {
+            payload = try bitStream.read()
+        } else {
+            payload = []
+        }
     }
     
     func encode(to bitStream: inout WritableBitStream) {
         bitStream.append(queue)
         bitStream.append(id)
-        bitStream.append(payload)
+        bitStream.append(failed)
+        if !failed {
+            bitStream.append(payload)
+        }
     }
 }
 

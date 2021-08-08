@@ -8,7 +8,6 @@
 import DequeModule
 import Foundation
 
-@MainActor
 final class MessageQueue {
     var waitingClients: Deque<(client: MessageQueueServerClient, id: UUID, expirationDate: Date?)> = Deque()
     private var messages: Deque<[UInt8]> = Deque()
@@ -52,7 +51,7 @@ final class MessageQueue {
     }
     
     internal final func remove(client: MessageQueueServerClient) {
-        client.webSocket.close(code: .normalClosure, promise: nil)
+        client.channel.close(mode: .all, promise: nil)
         waitingClients.removeAll { $0.client === client }
     }
 }

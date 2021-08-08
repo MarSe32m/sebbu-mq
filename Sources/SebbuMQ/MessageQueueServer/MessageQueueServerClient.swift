@@ -5,32 +5,27 @@
 //  Created by Sebastian Toivonen on 5.8.2021.
 //
 
-import SebbuKit
-import WebSocketKit
+import NIO
+import Foundation
+import SebbuBitStream
 
 final class MessageQueueServerClient {
     public unowned let messageQueueServer: MessageQueueServer
-    public let webSocket: WebSocket
+    public let channel: Channel
     
-    public init(server: MessageQueueServer, webSocket: WebSocket) {
+    public var isAuthenticated: Bool = false
+    
+    public init(server: MessageQueueServer, channel: Channel) {
         self.messageQueueServer = server
-        self.webSocket = webSocket
-        webSocket.onBinary { [weak self] _, buffer in
-            guard let bytes = buffer.getBytes(at: 0, length: buffer.readableBytes) else {
-                return
-            }
-            self?.received(bytes)
-        }
-        _ = webSocket.onClose.always { [weak self] _ in
-            self?.disconnected()
-        }
+        self.channel = channel
     }
     
     func send(_ packet: MessageQueuePacket) {
         var writeStream = WritableBitStream(size: 128)
         writeStream.appendObject(packet)
-        let data = writeStream.packBytes()
-        webSocket.send(data, promise: nil)
+        let bytes = writeStream.packBytes()
+        let buffer = channel.allocator.buffer(bytes: bytes)
+        channel.writeAndFlush(buffer, promise: nil)
     }
     
     func expire(queue: String, id: UUID) {
@@ -43,10 +38,10 @@ final class MessageQueueServerClient {
             print("Got a faulty packet...")
             return
         }
-        Task { await messageQueueServer.received(packet: packet, from: self) }
+        messageQueueServer.received(packet: packet, from: self)
     }
     
     public func disconnected() {
-        Task { await messageQueueServer.disconnect(messageQueueClient: self) }
+        messageQueueServer.disconnect(messageQueueClient: self)
     }
 }

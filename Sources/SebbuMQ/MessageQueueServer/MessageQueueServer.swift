@@ -5,87 +5,82 @@
 //  Created by Sebastian Toivonen on 5.8.2021.
 //
 
-import SebbuKit
-import NIOHTTP1
+import SebbuCrypto
 
-@MainActor
 public final class MessageQueueServer {
     private let storage = MessageQueueStorage()
     
     @usableFromInline
-    internal let webSocketServer: WebSocketServer
+    internal var networkServer: NetworkServer!
     
     private var clients = [MessageQueueServerClient]()
     
     private let username: String
     private let password: String
     
-    private var connectionHandler: MessageQueueClientConnectionHandler!
-    
-    public init(username: String, password: String, eventLoopGroup: EventLoopGroup) throws {
+    public init(username: String, password: String) throws {
         self.username = try BCrypt.hash(username)
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
-        webSocketServer = try WebSocketServer(tls: nil, eventLoopGroup: eventLoopGroup)
-        
-        connectionHandler = MessageQueueClientConnectionHandler(server: self)
-        webSocketServer.delegate = connectionHandler
-    }
-    
-    public init(username: String, password: String, numberOfThreads: Int) throws {
-        self.username = try BCrypt.hash(username)
-        self.password = try BCrypt.hash(password)
-        //TODO: Add tls option
-        webSocketServer = try WebSocketServer(tls: nil, numberOfThreads: numberOfThreads)
-        
-        connectionHandler = MessageQueueClientConnectionHandler(server: self)
-        webSocketServer.delegate = connectionHandler
+        networkServer = NetworkServer(messageQueueServer: self)
     }
     
     @inlinable
     public nonisolated final func startIPv4(port: Int) throws {
-        try webSocketServer.startIPv4(port: port)
+        try networkServer.startIPv4Blocking(port: port)
     }
     
     @inlinable
     public nonisolated final func startIPv6(port: Int) throws {
-        try webSocketServer.startIPv6(port: port)
+        try networkServer.startIPv6Blocking(port: port)
     }
     
     @inlinable
     public nonisolated final func shutdown() throws {
-        try webSocketServer.shutdown()
+        networkServer.shutdown()
     }
     
     final func received(packet: MessageQueuePacket, from: MessageQueueServerClient) {
         switch packet {
         case .connect(let connectionPacket):
-            do {
-                if try BCrypt.verify(connectionPacket.username, created: username)
-                && (try BCrypt.verify(connectionPacket.password, created: password)) {
-                    from.send(.connectionAccepted)
-                    return
-                } else {
-                    from.send(.connectionDeclined(.wrongCredentials))
+            if from.isAuthenticated {
+                from.send(.connectionAccepted)
+                return
+            }
+            Task.detached {
+                do {
+                    if try BCrypt.verify(connectionPacket.username, created: self.username)
+                        && (try BCrypt.verify(connectionPacket.password, created: self.password)) {
+                        from.send(.connectionAccepted)
+                        from.isAuthenticated = true
+                        return
+                    } else {
+                        from.send(.connectionDeclined(.wrongCredentials))
+                        Task {
+                            try await Task.sleep(nanoseconds: 1_000_000)
+                            from.channel.close(mode: .all, promise: nil)
+                        }
+                        return
+                    }
+                } catch {
+                    from.send(.connectionDeclined(.unknownError))
                     Task {
                         try await Task.sleep(nanoseconds: 1_000_000)
-                        from.webSocket.close(code: .policyViolation, promise: nil)
+                        from.channel.close(mode: .all, promise: nil)
                     }
-                    return
-                }
-            } catch {
-                from.send(.connectionDeclined(.unknownError))
-                Task {
-                    try await Task.sleep(nanoseconds: 1_000_000)
-                    from.webSocket.close(code: .policyViolation, promise: nil)
                 }
             }
             
         case .disconnect:
             disconnect(messageQueueClient: from)
         case .push(let pushPacket):
+            if !from.isAuthenticated { return }
             storage.push(queue: pushPacket.queue, value: pushPacket.payload)
         case .popRequest(let popRequestPacket):
+            if !from.isAuthenticated {
+                from.send(.popResponse(PopResponsePacket(queue: popRequestPacket.queue, id: popRequestPacket.id, payload: [], failed: true)))
+                return
+            }
             storage.pop(queue: popRequestPacket.queue, id: popRequestPacket.id, client: from, timeout: popRequestPacket.timeout)
         case .connectionAccepted, .connectionDeclined(_), .popResponse(_), .popExpired(_):
             break
@@ -97,19 +92,7 @@ public final class MessageQueueServer {
         storage.remove(client: messageQueueClient)
     }
     
-    final func _connected(_ client: WebSocket) {
-        clients.append(MessageQueueServerClient(server: self, webSocket: client))
-    }
-}
-
-fileprivate class MessageQueueClientConnectionHandler: WebSocketServerProtocol {
-    unowned let server: MessageQueueServer
-    
-    init(server: MessageQueueServer) {
-        self.server = server
-    }
-    
-    nonisolated public func onConnection(requestHead: HTTPRequestHead, webSocket: WebSocket, channel: Channel) {
-        Task { await server._connected(webSocket) }
+    final func connected(_ messageQueueServerClient: MessageQueueServerClient) {
+        clients.append(messageQueueServerClient)
     }
 }
