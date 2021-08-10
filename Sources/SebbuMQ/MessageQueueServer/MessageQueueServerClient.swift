@@ -21,7 +21,12 @@ final class MessageQueueServerClient {
     }
     
     func send(_ packet: MessageQueuePacket) {
-        var writeStream = WritableBitStream(size: 128)
+        var writeStream: WritableBitStream
+        if case let .popResponse(popResponse) = packet {
+            writeStream = WritableBitStream(size: popResponse.payload.count + 16 + popResponse.queue.count + 1 + 4)
+        } else {
+            writeStream = WritableBitStream(size: 32)
+        }
         writeStream.appendObject(packet)
         let bytes = writeStream.packBytes()
         let buffer = channel.allocator.buffer(bytes: bytes)
@@ -35,7 +40,6 @@ final class MessageQueueServerClient {
     public func received(_ data: [UInt8]) {
         var readStream = ReadableBitStream(bytes: data)
         guard let packet = try? MessageQueuePacket(from: &readStream) else {
-            print("Got a faulty packet...")
             return
         }
         messageQueueServer.received(packet: packet, from: self)

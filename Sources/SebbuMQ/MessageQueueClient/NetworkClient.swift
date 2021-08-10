@@ -11,7 +11,7 @@ import NIOExtras
 internal final class NetworkClient {
     private let eventLoopGroup: EventLoopGroup
     
-    private var channel: Channel!
+    var channel: Channel!
     
     let receiveHandler = ClientReceiveHandler()
     

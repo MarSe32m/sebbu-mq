@@ -23,6 +23,7 @@ public final class MessageQueueServer {
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
         networkServer = NetworkServer(messageQueueServer: self)
+        storage.startRemoveLoop(eventLoop: networkServer.eventLoopGroup.next())
     }
     
     @inlinable
@@ -41,6 +42,7 @@ public final class MessageQueueServer {
     }
     
     final func received(packet: MessageQueuePacket, from: MessageQueueServerClient) {
+        assert(networkServer.eventLoopGroup.next().inEventLoop, "We weren't on the eventloop...")
         switch packet {
         case .connect(let connectionPacket):
             if from.isAuthenticated {
@@ -49,10 +51,13 @@ public final class MessageQueueServer {
             }
             Task.detached {
                 do {
-                    if try BCrypt.verify(connectionPacket.username, created: self.username)
-                        && (try BCrypt.verify(connectionPacket.password, created: self.password)) {
+                    if  try BCrypt.verify(connectionPacket.username, created: self.username)
+                    && (try BCrypt.verify(connectionPacket.password, created: self.password)) {
                         from.send(.connectionAccepted)
                         from.isAuthenticated = true
+                        self.networkServer.eventLoopGroup.next().execute {
+                            self.connected(from)
+                        }
                         return
                     } else {
                         from.send(.connectionDeclined(.wrongCredentials))
@@ -87,7 +92,7 @@ public final class MessageQueueServer {
         }
     }
     
-    final func disconnect(messageQueueClient: MessageQueueServerClient) {	
+    final func disconnect(messageQueueClient: MessageQueueServerClient) {
         clients.removeAll { $0 === messageQueueClient }
         storage.remove(client: messageQueueClient)
     }

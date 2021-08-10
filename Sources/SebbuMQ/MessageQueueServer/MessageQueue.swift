@@ -10,9 +10,9 @@ import Foundation
 
 final class MessageQueue {
     var waitingClients: Deque<(client: MessageQueueServerClient, id: UUID, expirationDate: Date?)> = Deque()
-    private var messages: Deque<[UInt8]> = Deque()
+    var messages: Deque<[UInt8]> = Deque()
     
-    public let name: String
+    let name: String
     
     public init(name: String) {
         self.name = name
@@ -33,8 +33,8 @@ final class MessageQueue {
     
     /// When a client asks for a message
     public final func pop(for client: MessageQueueServerClient, id: UUID, timeout: Double?) {
-        if !messages.isEmpty {
-            client.send(.popResponse(PopResponsePacket(queue: name, id: id, payload: messages.removeFirst())))
+        if let message = messages.popFirst() {
+            client.send(.popResponse(PopResponsePacket(queue: name, id: id, payload: message)))
         } else {
             waitingClients.append((client: client, id: id, expirationDate: timeout != nil ? Date().addingTimeInterval(timeout!) : nil))
         }

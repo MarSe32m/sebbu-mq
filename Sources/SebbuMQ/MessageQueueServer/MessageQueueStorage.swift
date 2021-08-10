@@ -6,20 +6,12 @@
 //
 
 import Foundation
+import NIO
 
 final class MessageQueueStorage {
-    private var queues: [String : MessageQueue] = [:]
+    var queues: [String : MessageQueue] = [:]
     
     public init() {}
-    
-    public final func startLoop() {
-        Task.detached { [weak self] in
-            while let self = self {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                await self.removeTimedOutClients()
-            }
-        }
-    }
     
     public final func push(queue: String, value: [UInt8]) {
         if let queue = queues[queue] {
@@ -58,7 +50,17 @@ final class MessageQueueStorage {
         }
     }
     
-    private final func removeTimedOutClients() async {
+    final func startRemoveLoop(eventLoop: EventLoop) {
+        eventLoop.scheduleRepeatedTask(initialDelay: .seconds(10), delay: .seconds(10), notifying: nil) {[weak self] task in
+            guard let self = self else {
+                task.cancel(promise: nil)
+                return
+            }
+            self.removeTimedOutClients()
+        }
+    }
+    
+    private final func removeTimedOutClients() {
         for queue in queues.values {
             queue.removeTimedOutClients()
         }
