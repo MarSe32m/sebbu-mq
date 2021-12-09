@@ -1,11 +1,11 @@
-// swift-tools-version:5.4
+// swift-tools-version:5.5
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
 let package = Package(
     name: "sebbu-mq",
-    platforms: [.macOS(.v11)],
+    platforms: [.macOS(.v12)],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
@@ -28,10 +28,7 @@ let package = Package(
                              .product(name: "NIOExtras", package: "swift-nio-extras"),
                              .product(name: "DequeModule", package: "swift-collections"),
                              "SebbuMQ"
-                            ],
-                          //TODO: Remove!!!
-                          swiftSettings: [.unsafeFlags(["-Xfrontend", "-enable-experimental-concurrency"]),
-                                          .unsafeFlags(["-Xfrontend", "-disable-availability-checking"])]),
+                            ]),
         .target(
             name: "SebbuMQ",
             dependencies: [.product(name: "SebbuBitStream", package: "sebbu-bitstream"),
@@ -39,10 +36,7 @@ let package = Package(
                            .product(name: "NIO", package: "swift-nio"),
                            .product(name: "_NIOConcurrency", package: "swift-nio"),
                            .product(name: "NIOExtras", package: "swift-nio-extras"),
-                           .product(name: "DequeModule", package: "swift-collections")],
-            //TODO: Remove!!!
-            swiftSettings: [.unsafeFlags(["-Xfrontend", "-enable-experimental-concurrency"]),
-                            .unsafeFlags(["-Xfrontend", "-disable-availability-checking"])]),
+                           .product(name: "DequeModule", package: "swift-collections")]),
     
     ]
 )

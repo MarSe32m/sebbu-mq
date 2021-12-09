@@ -14,6 +14,8 @@ enum MessageQueuePacket: BitStreamCodable {
     case connectionDeclined(MessageQueueClientConnectionError)
     case disconnect
     case push(PushPacket)
+    case reliablePush(ReliablePushPacket)
+    case pushConfirmation(PushConfimarionPacket)
     case popRequest(PopRequestPacket)
     case popResponse(PopResponsePacket)
     case popExpired(PopExpirationPacket)
@@ -24,6 +26,8 @@ enum MessageQueuePacket: BitStreamCodable {
         case connectionDeclined
         case disconnect
         case push
+        case reliablePush
+        case pushConfimation
         case popRequest
         case popResponse
         case popExpiration
@@ -42,6 +46,10 @@ enum MessageQueuePacket: BitStreamCodable {
             self = .disconnect
         case .push:
             self = .push(try PushPacket(from: &bitStream))
+        case .reliablePush:
+            self = .reliablePush(try ReliablePushPacket(from: &bitStream))
+        case .pushConfimation:
+            self = .pushConfirmation(try PushConfimarionPacket(from: &bitStream))
         case .popRequest:
             self = .popRequest(try PopRequestPacket(from: &bitStream))
         case .popResponse:
@@ -65,6 +73,12 @@ enum MessageQueuePacket: BitStreamCodable {
             bitStream.append(CodingKey.disconnect)
         case .push(let message):
             bitStream.append(CodingKey.push)
+            bitStream.appendObject(message)
+        case .reliablePush(let message):
+            bitStream.append(CodingKey.reliablePush)
+            bitStream.appendObject(message)
+        case .pushConfirmation(let message):
+            bitStream.append(CodingKey.pushConfimation)
             bitStream.appendObject(message)
         case .popRequest(let message):
             bitStream.append(CodingKey.popRequest)
@@ -121,6 +135,42 @@ struct PushPacket: BitStreamCodable {
     func encode(to bitStream: inout WritableBitStream) {
         bitStream.append(queue)
         bitStream.append(payload)
+    }
+}
+
+struct ReliablePushPacket: BitStreamCodable {
+    let pushPacket: PushPacket
+    let id: UUID
+    
+    public init(_ pushPacket: PushPacket, id: UUID) {
+        self.pushPacket = pushPacket
+        self.id = id
+    }
+    
+    init(from bitStream: inout ReadableBitStream) throws {
+        pushPacket = try PushPacket(from: &bitStream)
+        id = try bitStream.read()
+    }
+    
+    func encode(to bitStream: inout WritableBitStream) {
+        bitStream.appendObject(pushPacket)
+        bitStream.append(id)
+    }
+}
+
+struct PushConfimarionPacket: BitStreamCodable {
+    let id: UUID
+    
+    public init(id: UUID) {
+        self.id = id
+    }
+    
+    init(from bitStream: inout ReadableBitStream) throws {
+        id = try bitStream.read()
+    }
+    
+    func encode(to bitStream: inout WritableBitStream) {
+        bitStream.append(id)
     }
 }
 

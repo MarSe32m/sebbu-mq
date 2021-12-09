@@ -2,7 +2,7 @@ import XCTest
 import SebbuMQ
 
 final class SebbuMQTests: XCTestCase {
-    func testExample() async throws {
+    func testExample() throws {
         
     }
 }

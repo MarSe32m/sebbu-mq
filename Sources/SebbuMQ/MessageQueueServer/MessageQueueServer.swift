@@ -49,10 +49,10 @@ public final class MessageQueueServer {
                 from.send(.connectionAccepted)
                 return
             }
-            Task.detached {
+            Task.detached { [username, password] in
                 do {
-                    if  try BCrypt.verify(connectionPacket.username, created: self.username)
-                    && (try BCrypt.verify(connectionPacket.password, created: self.password)) {
+                    if  try BCrypt.verify(connectionPacket.username, created: username)
+                    && (try BCrypt.verify(connectionPacket.password, created: password)) {
                         from.send(.connectionAccepted)
                         from.isAuthenticated = true
                         self.networkServer.eventLoopGroup.next().execute {
@@ -81,13 +81,17 @@ public final class MessageQueueServer {
         case .push(let pushPacket):
             if !from.isAuthenticated { return }
             storage.push(queue: pushPacket.queue, value: pushPacket.payload)
+        case .reliablePush(let reliablePushPacket):
+            if !from.isAuthenticated { return }
+            storage.push(queue: reliablePushPacket.pushPacket.queue, value: reliablePushPacket.pushPacket.payload)
+            from.send(.pushConfirmation(PushConfimarionPacket(id: reliablePushPacket.id)))
         case .popRequest(let popRequestPacket):
             if !from.isAuthenticated {
                 from.send(.popResponse(PopResponsePacket(queue: popRequestPacket.queue, id: popRequestPacket.id, payload: [], failed: true)))
                 return
             }
             storage.pop(queue: popRequestPacket.queue, id: popRequestPacket.id, client: from, timeout: popRequestPacket.timeout)
-        case .connectionAccepted, .connectionDeclined(_), .popResponse(_), .popExpired(_):
+        case .connectionAccepted, .connectionDeclined(_), .popResponse(_), .popExpired(_), .pushConfirmation(_):
             break
         }
     }

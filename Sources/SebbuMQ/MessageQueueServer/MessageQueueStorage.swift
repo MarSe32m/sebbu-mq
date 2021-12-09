@@ -23,6 +23,8 @@ final class MessageQueueStorage {
         }
     }
     
+    //TODO: Persistent push to disk?
+    
     @inlinable
     public final func pop(queue: String, id: UUID, client: MessageQueueServerClient, timeout: Double?) {
         if let queue = queues[queue] {
@@ -51,7 +53,7 @@ final class MessageQueueStorage {
     }
     
     final func startRemoveLoop(eventLoop: EventLoop) {
-        eventLoop.scheduleRepeatedTask(initialDelay: .seconds(10), delay: .seconds(10), notifying: nil) {[weak self] task in
+        eventLoop.scheduleRepeatedTask(initialDelay: .seconds(1), delay: .seconds(1), notifying: nil) {[weak self] task in
             guard let self = self else {
                 task.cancel(promise: nil)
                 return

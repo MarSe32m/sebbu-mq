@@ -20,7 +20,7 @@ final class MessageQueueServerClient {
         self.channel = channel
     }
     
-    func send(_ packet: MessageQueuePacket) {
+    public func send(_ packet: MessageQueuePacket) {
         var writeStream: WritableBitStream
         if case let .popResponse(popResponse) = packet {
             writeStream = WritableBitStream(size: popResponse.payload.count + 16 + popResponse.queue.count + 1 + 4)
@@ -33,7 +33,7 @@ final class MessageQueueServerClient {
         channel.writeAndFlush(buffer, promise: nil)
     }
     
-    func expire(queue: String, id: UUID) {
+    public func expire(queue: String, id: UUID) {
         send(.popExpired(PopExpirationPacket(queue: queue, id: id)))
     }
     
