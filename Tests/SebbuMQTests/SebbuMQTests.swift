@@ -3,6 +3,40 @@ import SebbuMQ
 import NIO
 
 final class SebbuMQTests: XCTestCase {
+    func testCorrectMessages() async throws {
+        let server = try! MessageQueueServer(username: "username", password: "password1", numberOfThreads: 1)
+        try await server.startIPv4(port: 25564)
+        let mtelg = MultiThreadedEventLoopGroup(numberOfThreads: 2)
+        let client = MessageQueueClient(eventLoopGroup: mtelg)
+        try await client.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25564)
+        var pushData: [UInt8] = [1]
+        for i in 0..<1000 {
+            client.push(queue: "test_queue", pushData)
+            guard let popData = await client.pop(queue: "test_queue", timeout: 1) else {
+                XCTFail("Popped data was different from the pushed one...")
+                return
+            }
+            XCTAssertEqual(pushData, popData)
+            pushData.append(UInt8(i % 255))
+        }
+        
+        pushData = [0]
+        
+        for _ in 0..<1000 {
+            client.push(queue: "test_queue", pushData)
+            guard let popData = await client.pop(queue: "test_queue", timeout: 1) else {
+                XCTFail("Popped data was different from the pushed one...")
+                return
+            }
+            XCTAssertEqual(pushData, popData)
+            pushData = (0..<1000).map {_ in UInt8.random(in: .min ... .max)}
+        }
+        
+        client.disconnect()
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        try await server.shutdown()
+    }
+    
     func test100Pushes100Pops() async throws {
         let server = try! MessageQueueServer(username: "username", password: "password1", numberOfThreads: 1)
         try await server.startIPv4(port: 25565)

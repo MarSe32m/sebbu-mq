@@ -38,7 +38,8 @@ let package = Package(
                            .product(name: "NIO", package: "swift-nio"),
                            .product(name: "_NIOConcurrency", package: "swift-nio"),
                            .product(name: "NIOExtras", package: "swift-nio-extras"),
-                           .product(name: "DequeModule", package: "swift-collections")]),
+                           .product(name: "DequeModule", package: "swift-collections"),
+                           .product(name: "Atomics", package: "swift-atomics")]),
         .testTarget(name: "SebbuMQTests", dependencies: ["SebbuMQ", .product(name: "NIO", package: "swift-nio")]),
     ]
 )

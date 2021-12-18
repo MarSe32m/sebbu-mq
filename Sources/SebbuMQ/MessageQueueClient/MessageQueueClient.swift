@@ -10,6 +10,7 @@ import SebbuCrypto
 import SebbuBitStream
 import NIO
 import _NIOConcurrency
+import Atomics
 
 public final class MessageQueueClient {
     private var reliablePushRequests = [UInt64 : UnsafeContinuation<Void, Error>]()
@@ -20,7 +21,7 @@ public final class MessageQueueClient {
     private var evlg: EventLoopGroup
     private let networkClient: NetworkClient
     
-    private var currentId: UInt64 = 1
+    private var currentId = ManagedAtomic<UInt64>(0)
     
     public enum PushQuality {
         case unreliable
@@ -77,14 +78,13 @@ public final class MessageQueueClient {
     
     public final func reliablePush(queue: String, _ data: [UInt8], _ timeout: Int64 = 30) async throws {
         if isDisconnected { throw PushError.disconnected }
+        let id = currentId.loadThenWrappingIncrement(ordering: .relaxed)
+        let pushPacket = PushPacket(queue: queue, payload: data)
         return try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
-            networkClient.channel.eventLoop.execute { [self] in
-                self.currentId &+= 1
-                let id = self.currentId
-                let pushPacket = PushPacket(queue: queue, payload: data)
+            networkClient.channel.eventLoop.execute {
                 self.reliablePushRequests[id] = continuation
-                send(.reliablePush(ReliablePushPacket(pushPacket, id: id)))
-                networkClient.channel.eventLoop.scheduleTask(in: .seconds(timeout)) { [self] in
+                self.send(.reliablePush(ReliablePushPacket(pushPacket, id: id)))
+                self.networkClient.channel.eventLoop.scheduleTask(in: .seconds(timeout)) {
                     self.reliablePushRequests.removeValue(forKey: id)?.resume(throwing: PushError.timedOut)
                 }
             }
@@ -93,12 +93,11 @@ public final class MessageQueueClient {
     
     public final func pop(queue: String, timeout: Double?) async -> [UInt8]? {
         if isDisconnected { return nil }
+        let id = currentId.loadThenWrappingIncrement(ordering: .relaxed)
+        let popRequestPacket = PopRequestPacket(queue: queue, timeout: timeout, id: id)
         return await withUnsafeContinuation({ continuation in
-            networkClient.channel.eventLoop.execute { [self] in
-                self.currentId &+= 1
-                let id = self.currentId
-                let popRequestPacket = PopRequestPacket(queue: queue, timeout: timeout, id: id)
-                self.popRequests[popRequestPacket.id] = continuation
+            networkClient.channel.eventLoop.execute {
+                self.popRequests[id] = continuation
                 self.send(.popRequest(popRequestPacket))
             }
         })
@@ -135,6 +134,8 @@ public final class MessageQueueClient {
         var writeStream: WritableBitStream
         if case let .push(pushPacket) = packet {
             writeStream = WritableBitStream(size: pushPacket.payload.count + pushPacket.queue.count + 4)
+        } else if case let .reliablePush(pushPacket) = packet {
+            writeStream = WritableBitStream(size: pushPacket.pushPacket.payload.count + pushPacket.pushPacket.queue.count + 4)
         } else {
             writeStream = WritableBitStream(size: 27)
         }

@@ -58,7 +58,6 @@ public final class MessageQueueServer {
     }
     
     final func received(packet: MessageQueuePacket, from: MessageQueueServerClient) {
-        //assert(networkServer.eventLoopGroup.next().inEventLoop, "We weren't on the eventloop...")
         switch packet {
         case .connect(let connectionPacket):
             if from.isAuthenticated {
@@ -96,7 +95,6 @@ public final class MessageQueueServer {
                     }
                 }
             }
-            
         case .disconnect:
             disconnect(messageQueueClient: from)
         case .push(let pushPacket):
