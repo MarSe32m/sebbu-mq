@@ -10,15 +10,16 @@ import NIO
 import NIOExtras
 
 public final class NetworkServer {
-    let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let eventLoopGroup: MultiThreadedEventLoopGroup
     
     var ipv4channel: Channel?
     var ipv6channel: Channel?
     
     unowned var messageQueueServer: MessageQueueServer
     
-    public init(messageQueueServer: MessageQueueServer) {
+    public init(messageQueueServer: MessageQueueServer, numberOfThreads: Int) {
         self.messageQueueServer = messageQueueServer
+        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: numberOfThreads)
     }
     
     public final func startIPv4(port: Int) -> EventLoopFuture<Void> {
@@ -28,11 +29,19 @@ public final class NetworkServer {
         }
     }
     
+    public final func startIPv4(port: Int) async throws {
+        try await startIPv4(port: port).get()
+    }
+    
     public final func startIPv6(port: Int) -> EventLoopFuture<Void> {
         bootstrap.bind(host: "::", port: port).flatMap { [unowned self] channel in
             self.ipv6channel = channel
             return eventLoopGroup.next().makeSucceededVoidFuture()
         }
+    }
+    
+    public final func startIPv6(port: Int) async throws {
+        try await startIPv6(port: port).get()
     }
     
     public final func startIPv4Blocking(port: Int) throws {
@@ -46,6 +55,11 @@ public final class NetworkServer {
     public final func shutdown() {
         ipv4channel?.close(mode: .all, promise: nil)
         ipv6channel?.close(mode: .all, promise: nil)
+    }
+    
+    public final func shutdown() async throws {
+        try await ipv4channel?.close()
+        try await ipv6channel?.close()
     }
     
     private var bootstrap: ServerBootstrap {

@@ -10,10 +10,12 @@ import Foundation
 import SebbuBitStream
 
 final class MessageQueueServerClient {
-    public unowned let messageQueueServer: MessageQueueServer
+    public weak var messageQueueServer: MessageQueueServer?
     public let channel: Channel
     
     public var isAuthenticated: Bool = false
+    
+    public let id = UUID()
     
     public init(server: MessageQueueServer, channel: Channel) {
         self.messageQueueServer = server
@@ -33,7 +35,7 @@ final class MessageQueueServerClient {
         channel.writeAndFlush(buffer, promise: nil)
     }
     
-    public func expire(queue: String, id: UUID) {
+    public func expire(queue: String, id: UInt64) {
         send(.popExpired(PopExpirationPacket(queue: queue, id: id)))
     }
     
@@ -42,10 +44,16 @@ final class MessageQueueServerClient {
         guard let packet = try? MessageQueuePacket(from: &readStream) else {
             return
         }
-        messageQueueServer.received(packet: packet, from: self)
+        messageQueueServer?.received(packet: packet, from: self)
     }
     
     public func disconnected() {
-        messageQueueServer.disconnect(messageQueueClient: self)
+        messageQueueServer?.disconnect(messageQueueClient: self)
+    }
+}
+
+extension MessageQueueServerClient: Equatable {
+    public static func ==(lhs: MessageQueueServerClient, rhs: MessageQueueServerClient) -> Bool {
+        lhs.id == rhs.id
     }
 }

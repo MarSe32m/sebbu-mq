@@ -11,29 +11,36 @@ import NIO
 final class MessageQueueStorage {
     var queues: [String : MessageQueue] = [:]
     
+    var count: Int = 0
+    
+    var totalMaxBytes: Int = Int.max
+    
     public init() {}
     
-    public final func push(queue: String, value: [UInt8]) {
-        if let queue = queues[queue] {
-            queue.push(value)
-        } else {
-            let newQueue = MessageQueue(name: queue)
-            queues[queue] = newQueue
-            newQueue.push(value)
-        }
-    }
     
     //TODO: Persistent push to disk?
     
+    @discardableResult
+    public final func push(queue: String, value: [UInt8]) -> Bool {
+        if let queue = queues[queue] {
+            return queue.push(value)
+        } else {
+            let newQueue = MessageQueue(name: queue, self)
+            queues[queue] = newQueue
+            return newQueue.push(value)
+        }
+    }
+    
     @inlinable
-    public final func pop(queue: String, id: UUID, client: MessageQueueServerClient, timeout: Double?) {
+    public final func pop(queue: String, id: UInt64, client: MessageQueueServerClient, timeout: Double?) {
         if let queue = queues[queue] {
             queue.pop(for: client, id: id, timeout: timeout)
         } else {
-            let newQueue = MessageQueue(name: queue)
+            let newQueue = MessageQueue(name: queue, self)
             queues[queue] = newQueue
             newQueue.pop(for: client, id: id, timeout: timeout)
         }
+        
     }
     
     @inlinable

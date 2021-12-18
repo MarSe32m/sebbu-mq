@@ -6,6 +6,7 @@
 //
 
 import SebbuCrypto
+import Foundation
 
 public final class MessageQueueServer {
     private let storage = MessageQueueStorage()
@@ -18,31 +19,46 @@ public final class MessageQueueServer {
     private let username: String
     private let password: String
     
-    public init(username: String, password: String) throws {
+    public var totalMaximumBytes: Int {
+        get { storage.totalMaxBytes }
+        set { storage.totalMaxBytes = newValue }
+    }
+    
+    public init(username: String, password: String, numberOfThreads: Int = 1) throws {
         self.username = try BCrypt.hash(username)
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
-        networkServer = NetworkServer(messageQueueServer: self)
+        //TODO: Make this thing multithreaded...
+        networkServer = NetworkServer(messageQueueServer: self, numberOfThreads: 1)
         storage.startRemoveLoop(eventLoop: networkServer.eventLoopGroup.next())
     }
     
-    @inlinable
     public nonisolated final func startIPv4(port: Int) throws {
         try networkServer.startIPv4Blocking(port: port)
     }
     
-    @inlinable
     public nonisolated final func startIPv6(port: Int) throws {
         try networkServer.startIPv6Blocking(port: port)
     }
     
-    @inlinable
-    public nonisolated final func shutdown() throws {
+    public nonisolated final func startIPv4(port: Int) async throws {
+        try await networkServer.startIPv4(port: port)
+    }
+    
+    public nonisolated final func startIPv6(port: Int) async throws {
+        try await networkServer.startIPv6(port: port)
+    }
+    
+    public nonisolated final func shutdown() {
         networkServer.shutdown()
     }
     
+    public nonisolated final func shutdown() async throws {
+        try await networkServer.shutdown()
+    }
+    
     final func received(packet: MessageQueuePacket, from: MessageQueueServerClient) {
-        assert(networkServer.eventLoopGroup.next().inEventLoop, "We weren't on the eventloop...")
+        //assert(networkServer.eventLoopGroup.next().inEventLoop, "We weren't on the eventloop...")
         switch packet {
         case .connect(let connectionPacket):
             if from.isAuthenticated {
@@ -51,8 +67,13 @@ public final class MessageQueueServer {
             }
             Task.detached { [username, password] in
                 do {
-                    if  try BCrypt.verify(connectionPacket.username, created: username)
-                    && (try BCrypt.verify(connectionPacket.password, created: password)) {
+                    async let isCorrectUsername = try BCrypt.verify(connectionPacket.username, created: username)
+                    async let isCorrectPassword = try BCrypt.verify(connectionPacket.password, created: password)
+                    let correctUsername = try await isCorrectUsername
+                    let correctPassword = try await isCorrectPassword
+                    
+                    let correctCredentials = correctUsername && correctPassword
+                    if correctCredentials {
                         from.send(.connectionAccepted)
                         from.isAuthenticated = true
                         self.networkServer.eventLoopGroup.next().execute {
@@ -83,8 +104,11 @@ public final class MessageQueueServer {
             storage.push(queue: pushPacket.queue, value: pushPacket.payload)
         case .reliablePush(let reliablePushPacket):
             if !from.isAuthenticated { return }
-            storage.push(queue: reliablePushPacket.pushPacket.queue, value: reliablePushPacket.pushPacket.payload)
-            from.send(.pushConfirmation(PushConfimarionPacket(id: reliablePushPacket.id)))
+            var pushError: ReliablePushError? = nil
+            if !storage.push(queue: reliablePushPacket.pushPacket.queue, value: reliablePushPacket.pushPacket.payload) {
+                pushError = .queueFull
+            }
+            from.send(.pushConfirmation(PushConfimarionPacket(id: reliablePushPacket.id, error: pushError)))
         case .popRequest(let popRequestPacket):
             if !from.isAuthenticated {
                 from.send(.popResponse(PopResponsePacket(queue: popRequestPacket.queue, id: popRequestPacket.id, payload: [], failed: true)))
@@ -97,8 +121,9 @@ public final class MessageQueueServer {
     }
     
     final func disconnect(messageQueueClient: MessageQueueServerClient) {
-        clients.removeAll { $0 === messageQueueClient }
+        clients.removeAll {messageQueueClient == $0}
         storage.remove(client: messageQueueClient)
+        messageQueueClient.channel.close(mode: .all, promise: nil)
     }
     
     final func connected(_ messageQueueServerClient: MessageQueueServerClient) {

@@ -140,9 +140,9 @@ struct PushPacket: BitStreamCodable {
 
 struct ReliablePushPacket: BitStreamCodable {
     let pushPacket: PushPacket
-    let id: UUID
+    let id: UInt64
     
-    public init(_ pushPacket: PushPacket, id: UUID) {
+    public init(_ pushPacket: PushPacket, id: UInt64) {
         self.pushPacket = pushPacket
         self.id = id
     }
@@ -158,31 +158,45 @@ struct ReliablePushPacket: BitStreamCodable {
     }
 }
 
+enum ReliablePushError: UInt32, Error, CaseIterable {
+    case queueFull
+    case unknown
+}
+
 struct PushConfimarionPacket: BitStreamCodable {
-    let id: UUID
+    let id: UInt64
+    var error: ReliablePushError?
     
-    public init(id: UUID) {
+    public init(id: UInt64, error: ReliablePushError? = nil) {
         self.id = id
+        self.error = error
     }
     
     init(from bitStream: inout ReadableBitStream) throws {
         id = try bitStream.read()
+        error = try bitStream.read() as Bool ? try bitStream.read() : nil
     }
     
     func encode(to bitStream: inout WritableBitStream) {
         bitStream.append(id)
+        if let error = error {
+            bitStream.append(true)
+            bitStream.append(error)
+        } else {
+            bitStream.append(false)
+        }
     }
 }
 
 struct PopRequestPacket: BitStreamCodable {
     let queue: String
     let timeout: Double?
-    let id: UUID
+    let id: UInt64
     
-    public init(queue: String, timeout: Double?) {
+    public init(queue: String, timeout: Double?, id: UInt64) {
         self.queue = queue
         self.timeout = timeout
-        self.id = UUID()
+        self.id = id
     }
     
     init(from bitStream: inout ReadableBitStream) throws {
@@ -209,11 +223,11 @@ struct PopRequestPacket: BitStreamCodable {
 
 struct PopResponsePacket: BitStreamCodable {
     let queue: String
-    let id: UUID
+    let id: UInt64
     let payload: [UInt8]
     let failed: Bool
     
-    public init(queue: String, id: UUID, payload: [UInt8], failed: Bool = false) {
+    public init(queue: String, id: UInt64, payload: [UInt8], failed: Bool = false) {
         self.queue = queue
         self.id = id
         self.payload = payload
@@ -244,9 +258,9 @@ struct PopResponsePacket: BitStreamCodable {
 
 struct PopExpirationPacket: BitStreamCodable {
     let queue: String
-    let id: UUID
+    let id: UInt64
     
-    public init(queue: String, id: UUID) {
+    public init(queue: String, id: UInt64) {
         self.queue = queue
         self.id = id
     }
