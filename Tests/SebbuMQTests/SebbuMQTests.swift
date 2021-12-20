@@ -12,10 +12,7 @@ final class SebbuMQTests: XCTestCase {
         var pushData: [UInt8] = [1]
         for i in 0..<1000 {
             client.push(queue: "test_queue", pushData)
-            guard let popData = await client.pop(queue: "test_queue", timeout: 1) else {
-                XCTFail("Popped data was different from the pushed one...")
-                return
-            }
+            let popData = try await client.pop(queue: "test_queue", timeout: 1)
             XCTAssertEqual(pushData, popData)
             pushData.append(UInt8(i % 255))
         }
@@ -24,15 +21,12 @@ final class SebbuMQTests: XCTestCase {
         
         for _ in 0..<1000 {
             client.push(queue: "test_queue", pushData)
-            guard let popData = await client.pop(queue: "test_queue", timeout: 1) else {
-                XCTFail("Popped data was different from the pushed one...")
-                return
-            }
+            let popData = try await client.pop(queue: "test_queue", timeout: 1)
             XCTAssertEqual(pushData, popData)
             pushData = (0..<1000).map {_ in UInt8.random(in: .min ... .max)}
         }
         
-        client.disconnect()
+        try await client.disconnect()
         try await Task.sleep(nanoseconds: 1_000_000_000)
         try await server.shutdown()
     }
@@ -45,20 +39,18 @@ final class SebbuMQTests: XCTestCase {
         let client2 = MessageQueueClient(eventLoopGroup: mtelg)
         try await client1.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25565)
         try await client2.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25565)
-        Task {
-            for _ in 0..<100 {
-                XCTAssertNoThrow {
-                    try await client1.reliablePush(queue: "test_queue", [1,2,3,4,5,6,7,8,9,10])
-                }
+        for _ in 0..<100 {
+            XCTAssertNoThrow {
+                try await client1.reliablePush(queue: "test_queue", [1,2,3,4,5,6,7,8,9,10])
             }
         }
         for _ in 0..<100 {
-            XCTAssertNotNil {
-                await client2.pop(queue: "test_queue", timeout: 1)
+            XCTAssertNoThrow {
+                try await client2.pop(queue: "test_queue", timeout: 1)
             }
         }
-        client1.disconnect()
-        client2.disconnect()
+        try await client1.disconnect()
+        try await client2.disconnect()
         try await Task.sleep(nanoseconds: 1_000_000_000)
         try await server.shutdown()
     }
@@ -91,7 +83,7 @@ final class SebbuMQTests: XCTestCase {
             }
         }
         
-        client.disconnect()
+        try await client.disconnect()
         try await Task.sleep(nanoseconds: 1_000_000_000)
         try await server.shutdown()
     }
@@ -102,10 +94,10 @@ final class SebbuMQTests: XCTestCase {
         let mtelg = MultiThreadedEventLoopGroup(numberOfThreads: 2)
         let client = MessageQueueClient(eventLoopGroup: mtelg)
         try await client.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25567)
-        let value = await client.pop(queue: "abcdefg", timeout: 5)
+        let value = try? await client.pop(queue: "abcdefg", timeout: 5)
         XCTAssertNil(value)
         
-        client.disconnect()
+        try await client.disconnect()
         try await Task.sleep(nanoseconds: 1_000_000_000)
         try await server.shutdown()
     }

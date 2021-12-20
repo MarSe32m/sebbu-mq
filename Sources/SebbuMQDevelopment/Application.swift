@@ -17,9 +17,8 @@ let client1 = MessageQueueClient(eventLoopGroup: mtelg1)
 func doFunc(_ client: MessageQueueClient, count: Int, workers: Int) async throws {
     try await client.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25565)
     for _ in 0..<count / workers {
-        let data = await client.pop(queue: "Hello", timeout: nil)
-        if data == nil {
-            fatalError("We got nil data...")
+        guard (try? await client.pop(queue: "Hello", timeout: 1)) != nil else {
+            fatalError("Failed to pop data...")
         }
     }
 }
@@ -36,11 +35,12 @@ public struct Application {
             MessageQueueClient(eventLoopGroup: mtelg2)
         }
         
-        guard await client1.pop(queue: "random_queue", timeout: 1.0) == nil else {
+        let popValue = try? await client1.pop(queue: "random_queue", timeout: 1.0)
+        guard popValue == nil else {
             fatalError("Timeout failed...")
         }
         
-        let sendData: [UInt8] = [UInt8].random(count: 16)
+        let sendData: [UInt8] = [UInt8].random(count: 128)
         let count = 2_000_000
         
         let start = Date()
@@ -48,7 +48,7 @@ public struct Application {
             group.addTask {
                 for i in 0..<count {
                     do {
-                        try await client1.push(queue: "Hello", sendData)
+                        try await client1.reliablePush(queue: "Hello", sendData)
                     } catch let error as MessageQueueClient.PushError {
                         switch error {
                         case .disconnected:
@@ -61,9 +61,6 @@ public struct Application {
                             print("Unknown push error...")
                         }
                     }
-//                    guard client1.push(queue: "Hello", sendData) else {
-//                        fatalError("Failed a reliable push...")
-//                    }
                     if count > 1_000_000 && i % 100_000 == 0 {
                         print(i, "messages pushed")
                     }
@@ -88,13 +85,13 @@ public struct Application {
         
         print()
         for _ in 0..<10 {
-            guard let _ = await client1.pop(queue: "reliable_push", timeout: 5) else {
-                fatalError("Failed to pop reliably pushed payloads...")
-            }
+            let _ = try await client1.pop(queue: "reliable_push", timeout: 5)
         }
         
-        client1.disconnect()
-        popClients.forEach { $0.disconnect() }
+        try await client1.disconnect()
+        for client in popClients {
+            try await client.disconnect()
+        }
         try await Task.sleep(nanoseconds: 5_000_000_000)
         try await server.shutdown()
     }

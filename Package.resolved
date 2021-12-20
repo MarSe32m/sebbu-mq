@@ -15,7 +15,7 @@
         "repositoryURL": "https://github.com/MarSe32m/sebbu-bitstream.git",
         "state": {
           "branch": "main",
-          "revision": "25e56cca3fbfe04a388f97d67ad8ffa14b072704",
+          "revision": "d3b55230d3694397a9d60d99e911790c507e1556",
           "version": null
         }
       },
@@ -24,7 +24,7 @@
         "repositoryURL": "https://github.com/MarSe32m/sebbu-cryptography.git",
         "state": {
           "branch": "main",
-          "revision": "570500a68ca6cae2b7ecf4eb29381a8d08b898e7",
+          "revision": "1bcc7b01d12e950dd3ce49e23dca6c269904fe46",
           "version": null
         }
       },
@@ -42,7 +42,7 @@
         "repositoryURL": "https://github.com/apple/swift-collections.git",
         "state": {
           "branch": "main",
-          "revision": "0959ba76a1d4a98fd11163aa83fd49c25b93bfae",
+          "revision": "22dc81b89fc1dee9d52c6a3fcfa1fcd08f184ae8",
           "version": null
         }
       },
@@ -51,7 +51,7 @@
         "repositoryURL": "https://github.com/apple/swift-crypto.git",
         "state": {
           "branch": "main",
-          "revision": "53da7b3706ae6a2bd621becbb201f3d8e24039d6",
+          "revision": "172d71fdc3c35a131ce78a8d9692c30910fb073d",
           "version": null
         }
       },
@@ -60,7 +60,7 @@
         "repositoryURL": "https://github.com/apple/swift-nio.git",
         "state": {
           "branch": "main",
-          "revision": "c1e2f093e8ca49498cb84498ce081f4fa527bf69",
+          "revision": "b5c662adfcea5912886d4fd57760d5d14ea39378",
           "version": null
         }
       },
@@ -69,7 +69,7 @@
         "repositoryURL": "https://github.com/apple/swift-nio-extras.git",
         "state": {
           "branch": "main",
-          "revision": "f72c4688f89c28502105509186eadc49a49cb922",
+          "revision": "6f8038f8ddb08967970399b9fa0b92164b9be8f8",
           "version": null
         }
       }

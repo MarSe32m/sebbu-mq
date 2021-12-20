@@ -14,14 +14,14 @@ import Atomics
 
 public final class MessageQueueClient {
     private var reliablePushRequests = [UInt64 : UnsafeContinuation<Void, Error>]()
-    private var popRequests = [UInt64 : UnsafeContinuation<[UInt8]?, Never>]()
+    private var popRequests = [UInt64 : UnsafeContinuation<[UInt8], Error>]()
     private var connectionContinuation: UnsafeContinuation<Void, Error>?
-    private var isDisconnected = false
+    private var isDisconnected = ManagedAtomic<Bool>(false)
     
     private var evlg: EventLoopGroup
     private let networkClient: NetworkClient
     
-    private var currentId = ManagedAtomic<UInt64>(0)
+    private var currentId = ManagedAtomic<UInt64>(UInt64.random(in: .min ... .max))
     
     public enum PushQuality {
         case unreliable
@@ -44,6 +44,12 @@ public final class MessageQueueClient {
         }
     }
     
+    public enum PopError: Error {
+        case timedOut
+        case unknown
+        case disconnected
+    }
+    
     public init(eventLoopGroup: EventLoopGroup? = nil) {
         let _evlg = eventLoopGroup != nil ? eventLoopGroup! : MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.evlg = _evlg
@@ -61,23 +67,31 @@ public final class MessageQueueClient {
         }
     }
     
-    public final func disconnect() {
+    public final func disconnect() async throws {
         send(.disconnect)
-        networkClient.channel.eventLoop.scheduleTask(in: .seconds(1)) {
-            self.networkClient.disconnectBlocking()
-            self.isDisconnected = true
+        isDisconnected.store(true, ordering: .relaxed)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        do {
+            try await networkClient.disconnect()?.get()
+        } catch {
+            if let error = error as? ChannelError {
+                if case .alreadyClosed = error {
+                    return
+                }
+            }
+            throw error
         }
     }
     
     @discardableResult
-    public final func push(queue: String, _ data: [UInt8])  -> Bool {
-        if isDisconnected { return false }
+    public final func push(queue: String, _ data: [UInt8]) -> Bool {
+        if isDisconnected.load(ordering: .relaxed) { return false }
         send(.push(PushPacket(queue: queue, payload: data)))
         return true
     }
     
     public final func reliablePush(queue: String, _ data: [UInt8], _ timeout: Int64 = 30) async throws {
-        if isDisconnected { throw PushError.disconnected }
+        if isDisconnected.load(ordering: .relaxed) { throw PushError.disconnected }
         let id = currentId.loadThenWrappingIncrement(ordering: .relaxed)
         let pushPacket = PushPacket(queue: queue, payload: data)
         return try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
@@ -91,26 +105,25 @@ public final class MessageQueueClient {
         }
     }
     
-    public final func pop(queue: String, timeout: Double?) async -> [UInt8]? {
-        if isDisconnected { return nil }
+    public final func pop(queue: String, timeout: Double?) async throws -> [UInt8] {
+        if isDisconnected.load(ordering: .relaxed) { throw PopError.disconnected }
         let id = currentId.loadThenWrappingIncrement(ordering: .relaxed)
         let popRequestPacket = PopRequestPacket(queue: queue, timeout: timeout, id: id)
-        return await withUnsafeContinuation({ continuation in
+        return try await withUnsafeThrowingContinuation { continuation in
             networkClient.channel.eventLoop.execute {
                 self.popRequests[id] = continuation
                 self.send(.popRequest(popRequestPacket))
             }
-        })
+        }
     }
     
     private final func resumeAll() {
-        for continuation in popRequests.values {
-            continuation.resume(returning: nil)
+        while let continuation = popRequests.popFirst()?.value {
+            continuation.resume(throwing: PopError.unknown)
         }
-        for continuation in reliablePushRequests.values {
+        while let continuation = reliablePushRequests.popFirst()?.value {
             continuation.resume(throwing: PushError.unknown)
         }
-        popRequests.removeAll()
     }
     
     private final func handlePushConfirmation(_ responsePacket: PushConfimarionPacket) {
@@ -127,7 +140,7 @@ public final class MessageQueueClient {
     }
     
     private final func handleExpiration(_ expirationPacket: PopExpirationPacket) {
-        popRequests.removeValue(forKey: expirationPacket.id)?.resume(returning: nil)
+        popRequests.removeValue(forKey: expirationPacket.id)?.resume(throwing: PopError.timedOut)
     }
     
     private final func send(_ packet: MessageQueuePacket) {
@@ -175,6 +188,6 @@ extension MessageQueueClient {
     func disconnected() {
         connectionContinuation?.resume(throwing: MessageQueueClientConnectionError.unknownError)
         connectionContinuation = nil
-        isDisconnected = true
+        isDisconnected.store(true, ordering: .relaxed)
     }
 }
