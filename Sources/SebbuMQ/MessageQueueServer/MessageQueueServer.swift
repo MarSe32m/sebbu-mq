@@ -7,6 +7,7 @@
 
 import SebbuCrypto
 import Foundation
+import SebbuTSDS
 
 public final class MessageQueueServer {
     private let storage = MessageQueueStorage()
@@ -14,7 +15,8 @@ public final class MessageQueueServer {
     @usableFromInline
     internal var networkServer: NetworkServer!
     
-    private var clients = [MessageQueueServerClient]()
+    //private var clients = [MessageQueueServerClient]()
+    private var clients = LockedArray<MessageQueueServerClient>()
     
     private let username: String
     private let password: String
@@ -29,8 +31,8 @@ public final class MessageQueueServer {
         self.password = try BCrypt.hash(password)
         //TODO: Add tls option
         //TODO: Make this thing multithreaded...
-        networkServer = NetworkServer(messageQueueServer: self, numberOfThreads: 1)
-        storage.startRemoveLoop(eventLoop: networkServer.eventLoopGroup.next())
+        networkServer = NetworkServer(messageQueueServer: self, numberOfThreads: numberOfThreads)
+        storage.startRemoveLoop(eventLoop: networkServer.eventLoopGroup.any())
     }
     
     public nonisolated final func startIPv4(port: Int) throws {

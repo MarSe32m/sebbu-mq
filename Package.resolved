@@ -15,7 +15,7 @@
         "repositoryURL": "https://github.com/MarSe32m/sebbu-bitstream.git",
         "state": {
           "branch": "main",
-          "revision": "d3b55230d3694397a9d60d99e911790c507e1556",
+          "revision": "86449cb651b7abc81c79102a94060a2099a06b1a",
           "version": null
         }
       },
@@ -25,6 +25,15 @@
         "state": {
           "branch": "main",
           "revision": "1bcc7b01d12e950dd3ce49e23dca6c269904fe46",
+          "version": null
+        }
+      },
+      {
+        "package": "sebbu-ts-ds",
+        "repositoryURL": "https://github.com/MarSe32m/sebbu-ts-ds.git",
+        "state": {
+          "branch": "main",
+          "revision": "ca7faf46401c2077c5d9cdab1cabd8ffc978abb1",
           "version": null
         }
       },
@@ -60,7 +69,7 @@
         "repositoryURL": "https://github.com/apple/swift-nio.git",
         "state": {
           "branch": "main",
-          "revision": "b5c662adfcea5912886d4fd57760d5d14ea39378",
+          "revision": "acbd69711395f5697b12beb4cf089929c9dbf3b4",
           "version": null
         }
       },
@@ -69,7 +78,7 @@
         "repositoryURL": "https://github.com/apple/swift-nio-extras.git",
         "state": {
           "branch": "main",
-          "revision": "6f8038f8ddb08967970399b9fa0b92164b9be8f8",
+          "revision": "c2e508ab193a42c701051ac5c856d833411046d9",
           "version": null
         }
       }

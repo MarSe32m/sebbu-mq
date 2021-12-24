@@ -15,6 +15,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/MarSe32m/sebbu-bitstream.git", .branch("main")),
         .package(url: "https://github.com/MarSe32m/sebbu-cryptography.git", .branch("main")),
+        .package(url: "https://github.com/MarSe32m/sebbu-ts-ds.git", .branch("main")),
         .package(url: "https://github.com/apple/swift-collections.git", .branch("main")),
         .package(url: "https://github.com/apple/swift-nio.git", .branch("main")),
         .package(url: "https://github.com/apple/swift-nio-extras.git", .branch("main")),
@@ -39,7 +40,8 @@ let package = Package(
                            .product(name: "_NIOConcurrency", package: "swift-nio"),
                            .product(name: "NIOExtras", package: "swift-nio-extras"),
                            .product(name: "DequeModule", package: "swift-collections"),
-                           .product(name: "Atomics", package: "swift-atomics")]),
+                           .product(name: "Atomics", package: "swift-atomics"),
+                           .product(name: "SebbuTSDS", package: "sebbu-ts-ds")]),
         .testTarget(name: "SebbuMQTests", dependencies: ["SebbuMQ", .product(name: "NIO", package: "swift-nio")]),
     ]
 )

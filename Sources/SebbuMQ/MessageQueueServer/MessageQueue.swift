@@ -7,12 +7,15 @@
 
 import DequeModule
 import Foundation
+import Atomics
+import SebbuTSDS
 
 final class MessageQueue {
     let name: String
     
-    var waitingClients: Deque<(client: MessageQueueServerClient, id: UInt64, expirationDate: Date?)> = Deque()
-    var messages: Deque<[UInt8]> = Deque()
+    var _waitingClients: LockedQueue<(client: MessageQueueServerClient, id: UInt64, expirationDate: Date?)> = LockedQueue(size: 4, resizeAutomatically: true)
+    var _messages: LockedQueue<[UInt8]> = LockedQueue(size: 2_000_100, resizeAutomatically: false)
+    
     
     public private(set) var count = 0
     public var maxSize = Int.max
@@ -31,7 +34,7 @@ final class MessageQueue {
             return false
         }
         // If there is clients waiting for a response, then it means that the queue is empty, so we just send the payload straight to the first waiting client
-        while let item = waitingClients.popFirst() {
+        while let item = _waitingClients.dequeue() {
             if let expirationDate = item.expirationDate, expirationDate < Date() {
                 item.client.expire(queue: name, id: item.id)
                 continue
@@ -42,23 +45,24 @@ final class MessageQueue {
         // No clients were waiting for a pop so we just add the data to the queue
         count += value.count
         messageQueueStorage.count += value.count
-        messages.append(value)
+        _messages.enqueue(value)
         return true
     }
     
     /// When a client asks for a message
     public final func pop(for client: MessageQueueServerClient, id: UInt64, timeout: Double?) {
-        if let message = messages.popFirst() {
+        //if let message = messages.popFirst() {
+        if let message = _messages.dequeue() {
             count -= message.count
             messageQueueStorage.count -= message.count
             client.send(.popResponse(PopResponsePacket(queue: name, id: id, payload: message)))
         } else {
-            waitingClients.append((client: client, id: id, expirationDate: timeout != nil ? Date().addingTimeInterval(timeout!) : nil))
+            _waitingClients.enqueue((client: client, id: id, expirationDate: timeout != nil ? Date().addingTimeInterval(timeout!) : nil))
         }
     }
     
     internal final func removeTimedOutClients() {
-        waitingClients.removeAll { (client, id, expirationDate) in
+        _waitingClients.removeAll { (client, id, expirationDate) in
             if expirationDate == nil ? false : expirationDate! < Date() {
                 client.expire(queue: name, id: id)
                 return true
@@ -69,6 +73,6 @@ final class MessageQueue {
     
     internal final func remove(client: MessageQueueServerClient) {
         client.channel.close(mode: .all, promise: nil)
-        waitingClients.removeAll { $0.client == client }
+        _waitingClients.removeAll { $0.client == client }
     }
 }

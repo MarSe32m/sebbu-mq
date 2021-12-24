@@ -7,9 +7,11 @@
 
 import Foundation
 import NIO
+import SebbuTSDS
 
 final class MessageQueueStorage {
-    var queues: [String : MessageQueue] = [:]
+    var queues: LockedDictionary<String, MessageQueue> = LockedDictionary()
+    //var queues: [String : MessageQueue] = [:]
     
     var count: Int = 0
     
@@ -26,9 +28,11 @@ final class MessageQueueStorage {
             return queue.push(value)
         } else {
             let newQueue = MessageQueue(name: queue, self)
-            queues[queue] = newQueue
-            return newQueue.push(value)
+            if queues.setIfNotExist(queue, value: newQueue) {
+                return newQueue.push(value)
+            }
         }
+        return push(queue: queue, value: value)
     }
     
     @inlinable
@@ -37,25 +41,18 @@ final class MessageQueueStorage {
             queue.pop(for: client, id: id, timeout: timeout)
         } else {
             let newQueue = MessageQueue(name: queue, self)
-            queues[queue] = newQueue
-            newQueue.pop(for: client, id: id, timeout: timeout)
+            if queues.setIfNotExist(queue, value: newQueue) {
+                newQueue.pop(for: client, id: id, timeout: timeout)
+            } else {
+                pop(queue: queue, id: id, client: client, timeout: timeout)
+            }
         }
-        
     }
     
     @inlinable
     public final func remove(client: MessageQueueServerClient) {
         for queue in queues.values {
             queue.remove(client: client)
-        }
-        var keysToRemove = [String]()
-        for (key, value) in queues {
-            if value.waitingClients.isEmpty {
-                keysToRemove.append(key)
-            }
-        }
-        for key in keysToRemove {
-            queues[key] = nil
         }
     }
     

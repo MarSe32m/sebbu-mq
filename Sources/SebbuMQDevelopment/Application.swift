@@ -17,7 +17,7 @@ let client1 = MessageQueueClient(eventLoopGroup: mtelg1)
 func doFunc(_ client: MessageQueueClient, count: Int, workers: Int) async throws {
     try await client.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25565)
     for _ in 0..<count / workers {
-        guard (try? await client.pop(queue: "Hello", timeout: 1)) != nil else {
+        guard (try? await client.pop(queue: "Hello", timeout: nil)) != nil else {
             fatalError("Failed to pop data...")
         }
     }

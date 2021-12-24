@@ -4,7 +4,7 @@ import NIO
 
 final class SebbuMQTests: XCTestCase {
     func testCorrectMessages() async throws {
-        let server = try! MessageQueueServer(username: "username", password: "password1", numberOfThreads: 1)
+        let server = try! MessageQueueServer(username: "username", password: "password1", numberOfThreads: 2)
         try await server.startIPv4(port: 25564)
         let mtelg = MultiThreadedEventLoopGroup(numberOfThreads: 2)
         let client = MessageQueueClient(eventLoopGroup: mtelg)
