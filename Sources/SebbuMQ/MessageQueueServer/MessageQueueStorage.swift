@@ -8,12 +8,13 @@
 import Foundation
 import NIO
 import SebbuTSDS
+import Atomics
 
 final class MessageQueueStorage {
     var queues: LockedDictionary<String, MessageQueue> = LockedDictionary()
     //var queues: [String : MessageQueue] = [:]
     
-    var count: Int = 0
+    var count = ManagedAtomic<Int>(0)
     
     var totalMaxBytes: Int = Int.max
     

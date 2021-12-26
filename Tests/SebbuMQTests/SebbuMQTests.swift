@@ -75,7 +75,6 @@ final class SebbuMQTests: XCTestCase {
             guard let error = error as? MessageQueueClient.PushError else {
                 XCTFail("Unknown error type?")
                 fatalError()
-                
             }
             guard case .queueFull = error else {
                 XCTFail("Error type was wrong. Should be a queueFull error")

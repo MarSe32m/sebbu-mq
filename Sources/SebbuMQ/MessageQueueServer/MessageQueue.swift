@@ -17,7 +17,7 @@ final class MessageQueue {
     var _messages: LockedQueue<[UInt8]> = LockedQueue(size: 2_000_100, resizeAutomatically: false)
     
     
-    public private(set) var count = 0
+    public private(set) var count = ManagedAtomic<Int>(0)
     public var maxSize = Int.max
     
     unowned let messageQueueStorage: MessageQueueStorage
@@ -30,7 +30,11 @@ final class MessageQueue {
     /// When a client pushes new data to the queue
     @discardableResult
     public final func push(_ value: [UInt8]) -> Bool {
-        if count + value.count > maxSize || messageQueueStorage.count + value.count > messageQueueStorage.totalMaxBytes {
+        let count = self.count.wrappingIncrementThenLoad(by: value.count, ordering: .relaxed)
+        let storageCount = messageQueueStorage.count.wrappingIncrementThenLoad(by: value.count, ordering: .relaxed)
+        if count  > maxSize || storageCount > messageQueueStorage.totalMaxBytes {
+            self.count.wrappingDecrement(by: value.count, ordering: .relaxed)
+            messageQueueStorage.count.wrappingDecrement(by: value.count, ordering: .relaxed)
             return false
         }
         // If there is clients waiting for a response, then it means that the queue is empty, so we just send the payload straight to the first waiting client
@@ -39,12 +43,11 @@ final class MessageQueue {
                 item.client.expire(queue: name, id: item.id)
                 continue
             }
+            self.count.wrappingDecrement(by: value.count, ordering: .relaxed)
+            messageQueueStorage.count.wrappingDecrement(by: value.count, ordering: .relaxed)
             item.client.send(.popResponse(PopResponsePacket(queue: name, id: item.id, payload: value)))
             return true
         }
-        // No clients were waiting for a pop so we just add the data to the queue
-        count += value.count
-        messageQueueStorage.count += value.count
         _messages.enqueue(value)
         return true
     }
@@ -53,8 +56,8 @@ final class MessageQueue {
     public final func pop(for client: MessageQueueServerClient, id: UInt64, timeout: Double?) {
         //if let message = messages.popFirst() {
         if let message = _messages.dequeue() {
-            count -= message.count
-            messageQueueStorage.count -= message.count
+            count.wrappingDecrement(by: message.count, ordering: .relaxed)
+            messageQueueStorage.count.wrappingDecrement(by: message.count, ordering: .relaxed)
             client.send(.popResponse(PopResponsePacket(queue: name, id: id, payload: message)))
         } else {
             _waitingClients.enqueue((client: client, id: id, expirationDate: timeout != nil ? Date().addingTimeInterval(timeout!) : nil))

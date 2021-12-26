@@ -26,11 +26,11 @@ func doFunc(_ client: MessageQueueClient, count: Int, workers: Int) async throws
 @main
 public struct Application {
     public static func main() async throws {
-        //server.totalMaximumBytes = 1_000
+        //server.totalMaximumBytes = 16_000_000
         try await server.startIPv4(port: 25565)
         try await client1.connect(username: "username", password: "password1", host: "127.0.0.1", port: 25565)
         
-        let workers = 50
+        let workers = 12
         let popClients = (0..<workers).map {_ in
             MessageQueueClient(eventLoopGroup: mtelg2)
         }
@@ -48,7 +48,7 @@ public struct Application {
             group.addTask {
                 for i in 0..<count {
                     do {
-                        try await client1.reliablePush(queue: "Hello", sendData)
+                        try await client1.push(queue: "Hello", sendData)
                     } catch let error as MessageQueueClient.PushError {
                         switch error {
                         case .disconnected:
