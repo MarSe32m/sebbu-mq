@@ -11,12 +11,17 @@ jobs:
     runs-on: windows-latest
     continue-on-error: true
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-         - tag: 5.6.2-RELEASE
-           branch: swift-5.6.2-release
-         - tag: DEVELOPMENT-SNAPSHOT-2022-06-26-a
+         - tag: 5.6.3-RELEASE
+           branch: swift-5.6.3-release
+         - tag: 5.7.3-RELEASE
+           branch: swift-5.7.3-release
+         - tag: 5.8.1-RELEASE
+           branch: swift-5.8.1-release
+           #TODO: Add 5.9-RELEASE
+         - tag: DEVELOPMENT-SNAPSHOT-2023-07-10-a
            branch: development
            
     steps:
@@ -26,17 +31,17 @@ jobs:
         tag: ${{ matrix.tag }}
     - uses: actions/checkout@v2
     
-    #- name: Swift Version
-    #  run: swift --version
+    - name: Swift Version
+      run: swift --version
       
     #- name: Build (Debug)
     #  run: swift build -c debug
-      
+    #  
     #- name: Build (Release)
     #  run: swift build -c release
-      
+    #  
     #- name: Test (Debug)
-    #  run: swift test --configuration debug --parallel
-      
+    #  run: swift test -c debug
+    #  
     #- name: Test (Release)
-    #  run: swift test --configuration release -Xswiftc -enable-testing --parallel
+    #  run: swift test -c release
